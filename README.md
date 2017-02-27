@@ -1,5 +1,5 @@
 # PSFReader
-A Python 3 library for reading Parameter-Storage Fromat binary file
+A Python 3 library for reading Parameter-Storage Format binary file
 
 ## Sample
 A sample program can be found in sample directory.
