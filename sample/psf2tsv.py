@@ -3,7 +3,6 @@ import psfreader.psfdata as psfdata
 import numpy as np
 import click
 
-
 @click.command()
 @click.argument('psffile')
 @click.argument('csvfile')
@@ -33,7 +32,7 @@ def read_write(psffile, csvfile):
             f.write('\t')
             if t == psfdata.TypeId.COMPLEX_DOUBLE:
                 f.write('REAL:' + s)
-                f.write(' IMAG:' + s)
+                f.write('\tIMAG:' + s)
             else:
                 f.write(s)
         f.write('\n')
@@ -43,7 +42,7 @@ def read_write(psffile, csvfile):
             for (v, t) in zip(vectors, s_types):
                 f.write('\t')
                 if t == psfdata.TypeId.COMPLEX_DOUBLE:
-                    f.write('{:E} {:E}'.format(v[i].real, v[i].imag))
+                    f.write('{:E}\t{:E}'.format(v[i].real, v[i].imag))
                 else:
                     f.write('{:E}'.format(v[i]))
             f.write('\n')
