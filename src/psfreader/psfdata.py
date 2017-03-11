@@ -24,6 +24,17 @@ def typetype_to_dtype(t):
     else:
         raise ValueError('Cannot to be a element of array: Type ' + str(TypeId(t)))
 
+def typeid_to_size(t):
+    if t == TypeId.INT8 :
+        return 4
+    elif t == TypeId.INT32:
+        return 4
+    elif t == TypeId.DOUBLE:
+        return 8
+    elif t == TypeId.COMPLEX_DOUBLE:
+        return 16
+    else:
+        raise ValueError('Cannot to be a element of array: Type ' + str(TypeId(t)))
 
 class SectionId(IntEnum):
     HEADER = 0
@@ -44,6 +55,7 @@ class PropertyTypeId(IntEnum):
 class ElementId(IntEnum):
     DATA = 0x10
     GROUP = 0x11
+    ZEROPAD = 0x14
 
 class SectionInfo:
     def __init__(self, offset, size):
@@ -173,6 +185,9 @@ class PSF_Variable:
     def read_data(self, array, i, psffile):
         array[i] = psffile.read_data(psffile.types[self.type_id].data_type)
 
+    def read_data_win(self, array, start, size, psffile):
+        psffile.read_data_win(array, start, size, psffile.types[self.type_id].data_type)
+
     def flatten_value(self, a):
         return [(self, a)] 
 
@@ -212,7 +227,11 @@ class PSF_Group:
     def read_data(self, array, i, psffile):
         for (v, ary) in array:
             v.read_data(ary, i, psffile)
-    
+
+    def read_data_win(self, array, start, size, psffile):
+        for (v, ary) in array:
+            v.read_data_win(ary, start, size, psffile)
+
     def flatten_value(self, a):
         res = list()
         for (v, ary) in a:

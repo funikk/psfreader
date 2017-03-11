@@ -72,7 +72,23 @@ class PSFFile:
             r = self.read_double()
             i = self.read_double()
             return complex(r, i)
-    
+
+    def read_data_win(self, array, start, size, t):
+        if t == TypeId.INT8 :
+            for i in range(start, start+size):
+                array[i] = self.read_int32()
+        elif t == TypeId.INT32:
+            for i in range(start, start+size):
+                array[i] = self.read_int32()
+        elif t == TypeId.DOUBLE:
+            for i in range(start, start+size):
+                array[i] = self.read_double()
+        elif t == TypeId.COMPLEX_DOUBLE:
+            for i in range(start, start+size):
+                re = self.read_double()
+                im = self.read_double()
+                array[i] = complex(re, im)
+
     def read_file(self):
         '''
         PSFの全体を読み込み，内部形式に変換する
@@ -244,9 +260,36 @@ class PSFFile:
             self.read_sweep_value_non_win(npoints, sweep_type)
 
     def read_sweep_value_win(self, win_size, npoints, sweep_type):
-        '''This library does not support windowed format'''
-        value_map = self.array_list_from_trace(1, self.traces)
-        self.value = self.flatten_value(value_map)
+        t = typetype_to_dtype(sweep_type)
+        sweep = np.empty(npoints, dtype=t)
+        value_map = self.array_list_from_trace(npoints, self.traces)
+        value = self.flatten_value(value_map)
+        sweep_var_size = typeid_to_size(sweep_type)
+
+        # skip zero-paddings
+        id = self.read_uint32()
+        if id != ElementId.ZEROPAD:
+            raise ValueError('Unexpected data id: ' + str(id))
+        pad_size = self.read_uint32()
+        self.fp.seek(pad_size, io.SEEK_CUR)
+
+        read_points = 0
+        while read_points < npoints:
+            id = self.read_uint32()
+            if id != ElementId.DATA:
+                raise ValueError('Unexpected data id: ' + str(id))
+            size = self.read_uint32() & 0x0000ffff
+
+            self.read_data_win(sweep, read_points, size, sweep_type)
+            skip_size = win_size - sweep_var_size*size
+            for (v, array) in value:
+                self.fp.seek(skip_size, io.SEEK_CUR) # skip dummy value
+                v.read_data_win(array, read_points, size, self)
+
+            read_points += size
+
+        self.sweep_value = sweep
+        self.value = value
 
     def read_sweep_value_non_win(self, npoints, sweep_type):
         t = typetype_to_dtype(sweep_type)
@@ -338,5 +381,3 @@ class PSFReader:
             if v.name == name:
                 return a
         return None
-
-        
