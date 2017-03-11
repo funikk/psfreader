@@ -15,6 +15,7 @@ def read_write(psffile, csvfile):
             return None
         signals = r.get_signal_names()
         s_types = [r.get_signal_types(name) for name in signals]
+        units = [r.get_signal_units(name) for name in signals]
         vectors = [r.get_signal(s) for s in signals]
         sweep = r.get_sweep_values()
         sweep_title = r.get_sweep_param_name()
@@ -28,13 +29,20 @@ def read_write(psffile, csvfile):
         
         f.write('# psf2tsv sample\n')
         f.write(sweep_title)
-        for (s, t) in zip(signals, s_types):
+        for (s, t, u) in zip(signals, s_types, units):
+            if u == 'V':
+                n = 'v({})'.format(s)
+            elif u == 'A':
+                n = 'i({})'.format(s)
+            else:
+                n = s
+
             f.write('\t')
             if t == psfdata.TypeId.COMPLEX_DOUBLE:
-                f.write('REAL:' + s)
-                f.write('\tIMAG:' + s)
+                f.write('REAL:' + n)
+                f.write('\tIMAG:' + n)
             else:
-                f.write(s)
+                f.write(n)
         f.write('\n')
         
         for i in range(length):

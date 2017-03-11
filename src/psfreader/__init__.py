@@ -332,8 +332,8 @@ class PSFReader:
         self.psf.read_file()
     
     def get_header_properties(self):
-        '''Return a dictionary from property name to PSF_Property''' 
-        return self.psf.properties
+        '''Return a dictionary of properties''' 
+        return {key: self.psf.properties[key].value for key in self.psf.properties}
 
     def get_signal_names(self):
         '''Return a list of signal names in this file'''
@@ -372,6 +372,26 @@ class PSFReader:
         for (v, a) in self.psf.value:
             if v.name == name:
                 return TypeId(self.psf.types[v.type_id].data_type)
+        
+        return None
+
+    def get_signal_units(self, name):
+        '''Return the Units of the signal''' 
+        for v in self.psf.sweep_vars:
+            if v.name == name:
+                prop = v.prop
+                if 'units' in prop:
+                    return prop['units'].value
+                else:
+                    return None
+
+        for (v, a) in self.psf.value:
+            if v.name == name:
+                prop = self.psf.types[v.type_id].prop
+                if 'units' in prop:
+                    return prop['units'].value
+                else:
+                    return None
         
         return None
 
