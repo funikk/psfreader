@@ -12,7 +12,7 @@ class TypeId(IntEnum):
     STRUCT = 0x10
     TUPLE = 0x12 # type listのconsの意味？
     
-def typetype_to_dtype(t):
+def typeid_to_dtype(t):
     if t == TypeId.INT8 :
         return np.int8
     elif t == TypeId.INT32:
@@ -179,7 +179,7 @@ class PSF_Variable:
 
     def to_array(self, npoints, psffile):
         psf_type = psffile.types[self.type_id].data_type
-        dtype = typetype_to_dtype(psf_type)
+        dtype = typeid_to_dtype(psf_type)
         return np.empty(npoints, dtype=dtype)
 
     def read_data(self, array, i, psffile):

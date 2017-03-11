@@ -260,7 +260,7 @@ class PSFFile:
             self.read_sweep_value_non_win(npoints, sweep_type)
 
     def read_sweep_value_win(self, win_size, npoints, sweep_type):
-        t = typetype_to_dtype(sweep_type)
+        t = typeid_to_dtype(sweep_type)
         sweep = np.empty(npoints, dtype=t)
         value_map = self.array_list_from_trace(npoints, self.traces)
         value = self.flatten_value(value_map)
@@ -292,7 +292,7 @@ class PSFFile:
         self.value = value
 
     def read_sweep_value_non_win(self, npoints, sweep_type):
-        t = typetype_to_dtype(sweep_type)
+        t = typeid_to_dtype(sweep_type)
         sweep = np.empty(npoints, dtype=t)
         value_map = self.array_list_from_trace(npoints, self.traces)
         
