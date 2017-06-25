@@ -276,17 +276,21 @@ class PSFFile:
         read_points = 0
         while read_points < npoints:
             id = self.read_uint32()
-            if id != ElementId.DATA:
+            if id == ElementId.DATA:
+                size = self.read_uint32() & 0x0000ffff
+
+                self.read_data_win(sweep, read_points, size, sweep_type)
+                skip_size = win_size - sweep_var_size*size
+                for (v, array) in value:
+                    self.fp.seek(skip_size, io.SEEK_CUR) # skip dummy value
+                    v.read_data_win(array, read_points, size, self)
+
+                read_points += size
+            elif id == ElementId.ZEROPAD:
+                pad_size = self.read_uint32()
+                self.fp.seek(pad_size, io.SEEK_CUR)
+            else:
                 raise ValueError('Unexpected data id: ' + str(id))
-            size = self.read_uint32() & 0x0000ffff
-
-            self.read_data_win(sweep, read_points, size, sweep_type)
-            skip_size = win_size - sweep_var_size*size
-            for (v, array) in value:
-                self.fp.seek(skip_size, io.SEEK_CUR) # skip dummy value
-                v.read_data_win(array, read_points, size, self)
-
-            read_points += size
 
         self.sweep_value = sweep
         self.value = value
