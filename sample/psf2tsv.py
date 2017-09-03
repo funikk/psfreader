@@ -26,6 +26,11 @@ def read_write(psffile, csvfile):
             return None
         
         length = r.get_sweep_npoints()
+        length2 = r.get_read_npoints()
+        
+        if length != length2:
+            print('Data length is mismatched. Target file is broken or incompleted!')
+            length = length2
         
         f.write('# psf2tsv sample\n')
         f.write(sweep_title)

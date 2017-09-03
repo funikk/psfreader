@@ -26,6 +26,7 @@ class PSFFile:
         self.traces = list()
         self.sweep_value = None
         self.value = None
+        self.read_points = 0
 
     def close(self):
         self.fp.close()
@@ -266,17 +267,10 @@ class PSFFile:
         value = self.flatten_value(value_map)
         sweep_var_size = typeid_to_size(sweep_type)
 
-        # skip zero-paddings
-        id = self.read_uint32()
-        if id != ElementId.ZEROPAD:
-            raise ValueError('Unexpected data id: ' + str(id))
-        pad_size = self.read_uint32()
-        self.fp.seek(pad_size, io.SEEK_CUR)
-
         read_points = 0
         while read_points < npoints:
-            id = self.read_uint32()
-            if id == ElementId.DATA:
+            block_id = self.read_uint32()
+            if block_id == ElementId.DATA:
                 size = self.read_uint32() & 0x0000ffff
 
                 self.read_data_win(sweep, read_points, size, sweep_type)
@@ -286,14 +280,16 @@ class PSFFile:
                     v.read_data_win(array, read_points, size, self)
 
                 read_points += size
-            elif id == ElementId.ZEROPAD:
+            elif block_id == ElementId.ZEROPAD:
                 pad_size = self.read_uint32()
                 self.fp.seek(pad_size, io.SEEK_CUR)
             else:
-                raise ValueError('Unexpected data id: ' + str(id))
+                #raise ValueError('Unexpected data id: ' + str(block_id))
+                break
 
-        self.sweep_value = sweep
-        self.value = value
+        self.read_points = read_points
+        self.sweep_value = sweep[0:read_points]
+        self.value = [(v, a[0:read_points]) for (v, a) in value]
 
     def read_sweep_value_non_win(self, npoints, sweep_type):
         t = typeid_to_dtype(sweep_type)
@@ -341,7 +337,7 @@ class PSFReader:
 
     def get_signal_names(self):
         '''Return a list of signal names in this file'''
-        return [v.name for (v, a) in self.psf.value]
+        return [v.name for (v, _) in self.psf.value]
 
     def is_swept(self):
         return not(self.psf.sweep_vars is None)
@@ -373,7 +369,7 @@ class PSFReader:
             if v.name == name:
                 return TypeId(self.psf.types[v.type_id].data_type)
 
-        for (v, a) in self.psf.value:
+        for (v, _) in self.psf.value:
             if v.name == name:
                 return TypeId(self.psf.types[v.type_id].data_type)
         
@@ -389,7 +385,7 @@ class PSFReader:
                 else:
                     return None
 
-        for (v, a) in self.psf.value:
+        for (v, _) in self.psf.value:
             if v.name == name:
                 prop = self.psf.types[v.type_id].prop
                 if 'units' in prop:
@@ -405,3 +401,7 @@ class PSFReader:
             if v.name == name:
                 return a
         return None
+
+    def get_read_npoints(self):
+        ''' Return read sample length'''
+        return self.psf.read_points
