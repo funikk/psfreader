@@ -309,6 +309,7 @@ class PSFFile:
                 v.read_data(array, i, self)
 
         self.sweep_value = sweep
+        self.read_points = npoints
         self.value = self.flatten_value(value_map)
         
     def array_list_from_trace(self, npoints, trace):
