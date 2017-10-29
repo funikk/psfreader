@@ -13,6 +13,6 @@ This library under is licensed under LGPL version 3 or later.
 - ma-laforge/PSFWrite.jl https://github.com/ma-laforge/PSFWrite.jl
 - pkerichang/libpsf2 https://github.com/pkerichang/libpsf2
 
-## Know Limitations
+## Known Limitations
 - cannot read mixed-signal simulation data
 - cannot read multi sweep variables
