@@ -5,7 +5,7 @@ A Python 3 library for reading Parameter-Storage Format binary file
 A sample program can be found in sample directory.
 
 ## License
-This library under is licensed under LGPL version 3 or later.
+This library is licensed under LGPL version 3 or later.
 
 ## Resources
 
@@ -16,3 +16,4 @@ This library under is licensed under LGPL version 3 or later.
 ## Known Limitations
 - cannot read mixed-signal simulation data
 - cannot read multi sweep variables
+- cannot read splited file (larger than 2GB)
