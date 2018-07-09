@@ -26,6 +26,7 @@ class PSFFile:
         self.traces = list()
         self.sweep_value = None
         self.value = None
+        self.variables = None
         self.read_points = 0
 
     def close(self):
@@ -82,8 +83,13 @@ class PSFFile:
             for i in range(start, start+size):
                 array[i] = self.read_int32()
         elif t == TypeId.DOUBLE:
-            for i in range(start, start+size):
-                array[i] = self.read_double()
+            length = 8 * size
+            dt = np.dtype('>d')
+            barray = self.fp.read(length)
+            data = np.frombuffer(barray, dtype=dt)
+            array[start:start+size] = data
+            #for i in range(start, start+size):
+            #    array[i] = self.read_double()
         elif t == TypeId.COMPLEX_DOUBLE:
             for i in range(start, start+size):
                 re = self.read_double()
@@ -237,7 +243,8 @@ class PSFFile:
                 
                 res.append((var, data))
 
-        self.value = res
+        self.value = self.list_to_map(res)
+        self.variables = res
 
         self.read_index(False)
         self.check_section_end(endpos)
@@ -264,7 +271,7 @@ class PSFFile:
         t = typeid_to_dtype(sweep_type)
         sweep = np.empty(npoints, dtype=t)
         value_map = self.array_list_from_trace(npoints, self.traces)
-        value = self.flatten_value(value_map)
+        value, arrays = self.flatten_value(value_map)
         sweep_var_size = typeid_to_size(sweep_type)
 
         read_points = 0
@@ -289,7 +296,8 @@ class PSFFile:
 
         self.read_points = read_points
         self.sweep_value = sweep[0:read_points]
-        self.value = [(v, a[0:read_points]) for (v, a) in value]
+        self.value = arrays
+        self.variables = value
 
     def read_sweep_value_non_win(self, npoints, sweep_type):
         t = typeid_to_dtype(sweep_type)
@@ -310,7 +318,7 @@ class PSFFile:
 
         self.sweep_value = sweep
         self.read_points = npoints
-        self.value = self.flatten_value(value_map)
+        self.variables, self.value = self.flatten_value(value_map)
         
     def array_list_from_trace(self, npoints, trace):
         return [(x, x.to_array(npoints, self)) for x in trace]
@@ -319,10 +327,14 @@ class PSFFile:
         pass
     
     def flatten_value(self, value_map):
-        res = list()
-        for (v, a) in value_map:
-            res.extend(v.flatten_value(a))
-        return res
+        variables = list()
+        arrays = dict()
+        for (v, a) in value_map: 
+            variables.extend(v.flatten_value(a, arrays))
+        return variables, arrays
+    
+    def list_to_map(self, lst):
+        return {v.name: a for (v, a) in lst}
 
 class PSFReader:
     '''
@@ -338,7 +350,7 @@ class PSFReader:
 
     def get_signal_names(self):
         '''Return a list of signal names in this file'''
-        return [v.name for (v, _) in self.psf.value]
+        return [v.name for (v, _) in self.psf.variables]
 
     def is_swept(self):
         return not(self.psf.sweep_vars is None)
@@ -370,10 +382,10 @@ class PSFReader:
             if v.name == name:
                 return TypeId(self.psf.types[v.type_id].data_type)
 
-        for (v, _) in self.psf.value:
+        for (v, _) in self.psf.variables:
             if v.name == name:
                 return TypeId(self.psf.types[v.type_id].data_type)
-        
+
         return None
 
     def get_signal_units(self, name):
@@ -386,7 +398,7 @@ class PSFReader:
                 else:
                     return None
 
-        for (v, _) in self.psf.value:
+        for (v, _) in self.psf.variables:
             if v.name == name:
                 prop = self.psf.types[v.type_id].prop
                 if 'units' in prop:
@@ -398,10 +410,10 @@ class PSFReader:
 
     def get_signal(self, name):
         '''Return the signal value(scalar or vector)'''
-        for (v, a) in self.psf.value:
-            if v.name == name:
-                return a
-        return None
+        if name in self.psf.value:
+            return self.psf.value[name]
+        else:
+            return None
 
     def get_read_npoints(self):
         ''' Return read sample length'''

@@ -188,7 +188,8 @@ class PSF_Variable:
     def read_data_win(self, array, start, size, psffile):
         psffile.read_data_win(array, start, size, psffile.types[self.type_id].data_type)
 
-    def flatten_value(self, a):
+    def flatten_value(self, a, arrays):
+        arrays[self.name] = a
         return [(self, a)] 
 
 class PSF_Group:
@@ -232,8 +233,8 @@ class PSF_Group:
         for (v, ary) in array:
             v.read_data_win(ary, start, size, psffile)
 
-    def flatten_value(self, a):
-        res = list()
+    def flatten_value(self, a, arrays):
+        variables = list()
         for (v, ary) in a:
-            res.extend(v.flatten_value(ary))
-        return res
+            variables.extend(v.flatten_value(ary, arrays))
+        return variables
