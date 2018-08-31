@@ -296,6 +296,8 @@ class PSFFile:
 
         self.read_points = read_points
         self.sweep_value = sweep[0:read_points]
+        for (_, a) in arrays.items():
+            a.resize(read_points, refcheck=False)
         self.value = arrays
         self.variables = value
 
