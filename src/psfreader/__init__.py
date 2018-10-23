@@ -7,27 +7,30 @@ class PSFFile:
         self.filename = filename
         self.fp = open(filename, 'rb')
         
-        x = self.read_uint32()
-        #if x != 0x0400:
-        #    raise ValueError('This file is not a PSF format.')
-        self.fp.seek(-12, io.SEEK_END)
-        b = self.fp.read(8)
-        if b != b'Clarissa':
+        try:
+            x = self.read_uint32()
+            #if x != 0x0400:
+            #    raise ValueError('This file is not a PSF format.')
+            self.fp.seek(-12, io.SEEK_END)
+            b = self.fp.read(8)
+            if b != b'Clarissa':
+                raise ValueError('This file is not a PSF format.')
+            
+            self.fp.seek(0, io.SEEK_END)
+            self.fsize = self.fp.tell()
+            self.fp.seek(0, io.SEEK_SET)
+    
+            self.sections = dict()
+            self.types = dict()
+            self.properties = dict()
+            self.sweep_vars = list()
+            self.traces = list()
+            self.sweep_value = None
+            self.value = None
+            self.variables = None
+            self.read_points = 0
+        except Exception:
             raise ValueError('This file is not a PSF format.')
-        
-        self.fp.seek(0, io.SEEK_END)
-        self.fsize = self.fp.tell()
-        self.fp.seek(0, io.SEEK_SET)
-
-        self.sections = dict()
-        self.types = dict()
-        self.properties = dict()
-        self.sweep_vars = list()
-        self.traces = list()
-        self.sweep_value = None
-        self.value = None
-        self.variables = None
-        self.read_points = 0
 
     def close(self):
         self.fp.close()
