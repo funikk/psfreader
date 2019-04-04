@@ -42,6 +42,8 @@ class SectionId(IntEnum):
     SWEEP = 2
     TRACE = 3
     VALUE = 4
+#    FOOTER = 0x0f
+
 
 class ChunkId(IntEnum):
     MAJOR_SECTION = 0x15

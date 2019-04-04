@@ -2,10 +2,23 @@ import struct
 import io
 from psfreader.psfdata import *
 
+class PSFReaderError(ValueError):
+    pass
+
 class PSFFile:
     def __init__(self, filename):
         self.filename = filename
         self.fp = open(filename, 'rb')
+
+        self.sections = dict()
+        self.types = dict()
+        self.properties = dict()
+        self.sweep_vars = list()
+        self.traces = list()
+        self.sweep_value = None
+        self.value = None
+        self.variables = None
+        self.read_points = 0
         
         try:
             x = self.read_uint32()
@@ -14,23 +27,15 @@ class PSFFile:
             self.fp.seek(-12, io.SEEK_END)
             b = self.fp.read(8)
             if b != b'Clarissa':
-                raise ValueError('This file is not a PSF format.')
+                raise PSFReaderError('This file is not a PSF format.')
             
             self.fp.seek(0, io.SEEK_END)
             self.fsize = self.fp.tell()
             self.fp.seek(0, io.SEEK_SET)
-    
-            self.sections = dict()
-            self.types = dict()
-            self.properties = dict()
-            self.sweep_vars = list()
-            self.traces = list()
-            self.sweep_value = None
-            self.value = None
-            self.variables = None
-            self.read_points = 0
         except Exception:
-            raise ValueError('This file is not a PSF format.')
+            self.has_footer = False
+        else:
+            self.has_footer = True
 
     def close(self):
         self.fp.close()
@@ -103,60 +108,100 @@ class PSFFile:
         '''
         PSFの全体を読み込み，内部形式に変換する
         '''
-        size = self.fsize
-        self.fp.seek(self.fsize-4, io.SEEK_SET)
-        datasize = self.read_uint32()
-        
-        num_section = (size - datasize - 12) // 8 # //は整数上の除算(端数切り捨て)
-        # 12は文字列'Clarissa'の分？
-        last_offset = 0
-        last_section_num = -1
-        
-        toc = size - 12 - num_section*8 # セクション情報の頭の位置
 
-        sections = dict()
-        section_id = -1
-        for i in range(num_section):
-            self.fp.seek(toc + 8*i)
-            section_id = self.read_uint32()
-            section_offset = self.read_uint32()
+        self.completed = True
+        if self.has_footer:
+            size = self.fsize
+            self.fp.seek(self.fsize-4, io.SEEK_SET)
+            datasize = self.read_uint32()
 
-            if i > 1: # 2つのセクションの位置の差がサイズである
-                sections[last_section_num].size = section_offset - last_offset
-            sections[section_id] = SectionInfo(section_offset, 0)
-            
-            last_section_num = section_id
-            last_offset = section_offset
-        sections[last_section_num].size = size - last_offset # 最後のセクション
-        self.sections = sections
+            num_section = (size - datasize - 12) // 8 # //は整数上の除算(端数切り捨て)
+            # 12は文字列'Clarissa'の分？
+            last_offset = 0
+            last_section_num = -1
 
-        # セクションごとの前処理
-        self.read_properties()
-        
-        if SectionId.TYPE in self.sections:
-            self.read_types()
-        
-        if SectionId.SWEEP in self.sections:
-            self.read_sweep()
-        
-        if SectionId.TRACE in self.sections:
-            self.read_trace()
+            toc = size - 12 - num_section*8 # セクション情報の頭の位置
 
-        if SectionId.VALUE in self.sections:
-            if len(self.sweep_vars) == 0:
-                self.read_non_sweep_value()
-            elif len(self.sweep_vars) != 1:
-                raise ValueError('Not supported file format: Sweep variables is more than one.')
+            sections = dict()
+            section_id = -1
+            for i in range(num_section):
+                self.fp.seek(toc + 8*i)
+                section_id = self.read_uint32()
+                section_offset = self.read_uint32()
+
+                if i > 1: # 2つのセクションの位置の差がサイズである
+                    sections[last_section_num].size = section_offset - last_offset
+                sections[section_id] = SectionInfo(section_offset, 0)
+
+                last_section_num = section_id
+                last_offset = section_offset
+            sections[last_section_num].size = size - last_offset # 最後のセクション
+            self.sections = sections
+
+            # セクションごとの前処理
+            self.fp.seek(4, io.SEEK_SET)
+            self.read_properties()
+
+            if SectionId.TYPE in self.sections:
+                self.read_section(SectionId.TYPE)
+
+            if SectionId.SWEEP in self.sections:
+                self.read_section(SectionId.SWEEP)
+
+            if SectionId.TRACE in self.sections:
+                self.read_section(SectionId.TRACE)
+
+            if SectionId.VALUE in self.sections:
+                self.read_section(SectionId.VALUE)
             else:
-                self.read_sweep_value()
+                self.value = None
         else:
-            self.value = None
+            self.fp.seek(4, io.SEEK_SET)
+            self.read_properties()
+
+            while self.read_section():
+                pass
+            
 
     def read_chunk_preamble(self, chunkid):
         c_id = self.read_uint32()
         if c_id != chunkid:
-            raise ValueError('Unexpected ChunkId. Expected: ' + str(chunkid) + ', Actually: ' + str(c_id))
+            raise PSFReaderError('Unexpected ChunkId. Expected: ' + repr(chunkid) + ', Actually: ' + hex(c_id))
         return self.read_uint32()
+
+    def read_section(self, section_num=None):
+        if section_num is not None:
+            endpos = self.read_section_preamble(section_num)
+        else:
+            self.fp.seek(-4, io.SEEK_CUR)
+            section_num = self.read_uint32()
+            if section_num not in set(SectionId):
+                return False
+            endpos = self.read_chunk_preamble(ChunkId.MAJOR_SECTION)
+
+        if section_num == SectionId.TYPE:
+            self.read_types()
+            res = True
+        elif section_num == SectionId.SWEEP:
+            self.read_sweep()
+            res = True
+        elif section_num == SectionId.TRACE:
+            self.read_trace()
+            res = True
+        elif section_num == SectionId.VALUE:
+            if len(self.sweep_vars) == 0:
+                self.read_non_sweep_value()
+            elif len(self.sweep_vars) != 1:
+                raise PSFReaderError('Not supported file format: Sweep variables is more than one.')
+            else:
+                self.read_sweep_value()
+            res = False
+        else:
+            return False
+
+        self.check_section_end(endpos)
+
+        return res
 
     def read_section_preamble(self, section):
         sectioninfo = self.sections[section]
@@ -165,15 +210,11 @@ class PSFFile:
         return self.read_chunk_preamble(ChunkId.MAJOR_SECTION)
 
     def read_properties(self):
-        endpos = self.read_section_preamble(SectionId.HEADER)
-        
+        endpos = self.read_chunk_preamble(ChunkId.MAJOR_SECTION)
         self.properties = PSF_Property.read_dictionary(self)
-
         self.check_section_end(endpos)
 
     def read_types(self):
-        endpos = self.read_section_preamble(SectionId.TYPE)
-        
         self.types = dict()
         end_sub = self.read_chunk_preamble(ChunkId.MINOR_SECTION)
         while self.fp.tell() < end_sub:
@@ -181,7 +222,6 @@ class PSFFile:
             typedef.read(self, self.types)
 
         self.read_index(False)
-        self.check_section_end(endpos)
     
     def read_index(self, is_trace):
         '''
@@ -190,8 +230,6 @@ class PSFFile:
         pass
 
     def read_sweep(self):
-        endpos = self.read_section_preamble(SectionId.SWEEP)
-        
         self.sweep_vars = list()
         while True:
             s_var = PSF_Variable()
@@ -199,11 +237,8 @@ class PSFFile:
                 self.sweep_vars.append(s_var)
             else:
                 break
-        
-        self.check_section_end(endpos)
     
     def read_trace(self):
-        endpos = self.read_section_preamble(SectionId.TRACE)
         endsub = self.read_chunk_preamble(ChunkId.MINOR_SECTION)
         
         valid = True
@@ -220,10 +255,8 @@ class PSFFile:
                     self.traces.append(var)
 
         self.read_index(True)
-        self.check_section_end(endpos)
 
     def read_non_sweep_value(self):
-        endpos = self.read_section_preamble(SectionId.VALUE)
         endsub = self.read_chunk_preamble(ChunkId.MINOR_SECTION)
         
         valid = True
@@ -250,7 +283,6 @@ class PSFFile:
         self.variables = res
 
         self.read_index(False)
-        self.check_section_end(endpos)
 
     def read_sweep_value(self):
         npoints = self.properties['PSF sweep points'].value
@@ -263,7 +295,6 @@ class PSFFile:
         else:
             win_size = 0
         
-        endpos = self.read_section_preamble(SectionId.VALUE)
         
         if win_size > 0:
             self.read_sweep_value_win(win_size, npoints, sweep_type)
@@ -295,6 +326,7 @@ class PSFFile:
                 self.fp.seek(pad_size, io.SEEK_CUR)
             else:
                 #raise ValueError('Unexpected data id: ' + str(block_id))
+                self.completed = False
                 break
 
         self.read_points = read_points
@@ -318,7 +350,7 @@ class PSFFile:
                 x = self.read_uint32()
                 x = self.read_uint32()
                 if x!= v.id:
-                    raise ValueError('Unexpected data id:' + str(x))
+                    raise PSFReaderError('Unexpected data id:' + str(x))
                 v.read_data(array, i, self)
 
         self.sweep_value = sweep
@@ -329,7 +361,7 @@ class PSFFile:
         return [(x, x.to_array(npoints, self)) for x in trace]
     
     def check_section_end(self, endpos):
-        pass
+        self.fp.seek(endpos, io.SEEK_SET)
     
     def flatten_value(self, value_map):
         variables = list()
@@ -423,3 +455,7 @@ class PSFReader:
     def get_read_npoints(self):
         ''' Return read sample length'''
         return self.psf.read_points
+
+    def is_wellformed(self):
+        return self.psf.has_footer and self.psf.completed
+    

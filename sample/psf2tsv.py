@@ -1,11 +1,8 @@
 import psfreader
 import psfreader.psfdata as psfdata
 import numpy as np
-import click
+import argparse
 
-@click.command()
-@click.argument('psffile')
-@click.argument('csvfile')
 def read_write(psffile, csvfile):
     print('reading psffile: ' + psffile)
     r = psfreader.PSFReader(psffile)
@@ -62,4 +59,9 @@ def read_write(psffile, csvfile):
     print('Done!')
 
 if __name__ == '__main__':
-    read_write()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('psffile')
+    parser.add_argument('csvfile')
+    opt = parser.parse_args()
+    
+    read_write(opt.psffile, opt.csvfile)
