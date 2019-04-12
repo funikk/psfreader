@@ -2,8 +2,10 @@ import struct
 import io
 from psfreader.psfdata import *
 
+
 class PSFReaderError(ValueError):
     pass
+
 
 class PSFFile:
     def __init__(self, filename):
@@ -16,9 +18,13 @@ class PSFFile:
         self.sweep_vars = list()
         self.traces = list()
         self.sweep_value = None
+        self.sweep_value_w_var = None
         self.value = None
         self.variables = None
         self.read_points = 0
+        self.fp.seek(0, io.SEEK_END)
+        self.fsize = self.fp.tell()
+        self.fp.seek(0, io.SEEK_SET)
         
         try:
             x = self.read_uint32()
@@ -28,9 +34,6 @@ class PSFFile:
             b = self.fp.read(8)
             if b != b'Clarissa':
                 raise PSFReaderError('This file is not a PSF format.')
-            
-            self.fp.seek(0, io.SEEK_END)
-            self.fsize = self.fp.tell()
             self.fp.seek(0, io.SEEK_SET)
         except Exception:
             self.has_footer = False
@@ -63,16 +66,16 @@ class PSFFile:
 
     def read_str(self):
         length = self.read_uint32()
-        extras = ((length+3) & ~0x03) - length # 4byte単位に切り上げたときのパディング
+        extras = ((length + 3) & ~0x03) - length  # 4byte単位に切り上げたときのパディング
         data = self.fp.read(length)
         self.fp.read(extras)
         return data.decode()
-    
+
     def unread_uint32(self):
         self.fp.seek(-4, io.SEEK_CUR)
-    
+
     def read_data(self, t):
-        if t == TypeId.INT8 :
+        if t == TypeId.INT8:
             return self.read_int32()
         elif t == TypeId.INT32:
             return self.read_int32()
@@ -84,27 +87,27 @@ class PSFFile:
             return complex(r, i)
 
     def read_data_win(self, array, start, size, t):
-        if t == TypeId.INT8 :
-            for i in range(start, start+size):
+        if t == TypeId.INT8:
+            for i in range(start, start + size):
                 array[i] = self.read_int32()
         elif t == TypeId.INT32:
-            for i in range(start, start+size):
+            for i in range(start, start + size):
                 array[i] = self.read_int32()
         elif t == TypeId.DOUBLE:
             length = 8 * size
             dt = np.dtype('>d')
             barray = self.fp.read(length)
             data = np.frombuffer(barray, dtype=dt)
-            array[start:start+size] = data
+            array[start:start + size] = data
             #for i in range(start, start+size):
             #    array[i] = self.read_double()
         elif t == TypeId.COMPLEX_DOUBLE:
-            for i in range(start, start+size):
+            for i in range(start, start + size):
                 re = self.read_double()
                 im = self.read_double()
                 array[i] = complex(re, im)
 
-    def read_file(self):
+    def read_file(self, header_only=False):
         '''
         PSFの全体を読み込み，内部形式に変換する
         '''
@@ -112,30 +115,30 @@ class PSFFile:
         self.completed = True
         if self.has_footer:
             size = self.fsize
-            self.fp.seek(self.fsize-4, io.SEEK_SET)
+            self.fp.seek(self.fsize - 4, io.SEEK_SET)
             datasize = self.read_uint32()
 
-            num_section = (size - datasize - 12) // 8 # //は整数上の除算(端数切り捨て)
+            num_section = (size - datasize - 12) // 8  # //は整数上の除算(端数切り捨て)
             # 12は文字列'Clarissa'の分？
             last_offset = 0
             last_section_num = -1
 
-            toc = size - 12 - num_section*8 # セクション情報の頭の位置
+            toc = size - 12 - num_section * 8  # セクション情報の頭の位置
 
             sections = dict()
             section_id = -1
             for i in range(num_section):
-                self.fp.seek(toc + 8*i)
+                self.fp.seek(toc + 8 * i)
                 section_id = self.read_uint32()
                 section_offset = self.read_uint32()
 
-                if i > 1: # 2つのセクションの位置の差がサイズである
+                if i > 1:  # 2つのセクションの位置の差がサイズである
                     sections[last_section_num].size = section_offset - last_offset
                 sections[section_id] = SectionInfo(section_offset, 0)
 
                 last_section_num = section_id
                 last_offset = section_offset
-            sections[last_section_num].size = size - last_offset # 最後のセクション
+            sections[last_section_num].size = size - last_offset  # 最後のセクション
             self.sections = sections
 
             # セクションごとの前処理
@@ -151,6 +154,9 @@ class PSFFile:
             if SectionId.TRACE in self.sections:
                 self.read_section(SectionId.TRACE)
 
+            if header_only:
+                return
+
             if SectionId.VALUE in self.sections:
                 self.read_section(SectionId.VALUE)
             else:
@@ -161,7 +167,6 @@ class PSFFile:
 
             while self.read_section():
                 pass
-            
 
     def read_chunk_preamble(self, chunkid):
         c_id = self.read_uint32()
@@ -205,7 +210,7 @@ class PSFFile:
 
     def read_section_preamble(self, section):
         sectioninfo = self.sections[section]
-        
+
         self.fp.seek(sectioninfo.offset, io.SEEK_SET)
         return self.read_chunk_preamble(ChunkId.MAJOR_SECTION)
 
@@ -222,7 +227,7 @@ class PSFFile:
             typedef.read(self, self.types)
 
         self.read_index(False)
-    
+
     def read_index(self, is_trace):
         '''
         一般的に必要ないデータらしく省略
@@ -237,10 +242,10 @@ class PSFFile:
                 self.sweep_vars.append(s_var)
             else:
                 break
-    
+
     def read_trace(self):
         endsub = self.read_chunk_preamble(ChunkId.MINOR_SECTION)
-        
+
         valid = True
         self.traces = list()
         while valid and self.fp.tell() < endsub:
@@ -258,7 +263,7 @@ class PSFFile:
 
     def read_non_sweep_value(self):
         endsub = self.read_chunk_preamble(ChunkId.MINOR_SECTION)
-        
+
         valid = True
         res = list()
         while valid and self.fp.tell() < endsub:
@@ -270,13 +275,13 @@ class PSFFile:
                 type_id = self.types[psf_type_id].data_type
                 data = self.read_data(type_id)
                 prop = PSF_Property.read_dictionary(self)
-                
+
                 var = PSF_Variable()
                 var.id = var_id
                 var.name = name
                 var.type_id = id
                 var.prop = prop
-                
+
                 res.append((var, data))
 
         self.value = self.list_to_map(res)
@@ -286,16 +291,15 @@ class PSFFile:
 
     def read_sweep_value(self):
         npoints = self.properties['PSF sweep points'].value
-        
+
         sweep_var = self.sweep_vars[0]
         sweep_type = self.types[sweep_var.type_id].data_type
-        
+
         if 'PSF window size' in self.properties:
             win_size = self.properties['PSF window size'].value
         else:
             win_size = 0
-        
-        
+
         if win_size > 0:
             self.read_sweep_value_win(win_size, npoints, sweep_type)
         else:
@@ -315,9 +319,9 @@ class PSFFile:
                 size = self.read_uint32() & 0x0000ffff
 
                 self.read_data_win(sweep, read_points, size, sweep_type)
-                skip_size = win_size - sweep_var_size*size
+                skip_size = win_size - sweep_var_size * size
                 for (v, array) in value:
-                    self.fp.seek(skip_size, io.SEEK_CUR) # skip dummy value
+                    self.fp.seek(skip_size, io.SEEK_CUR)  # skip dummy value
                     v.read_data_win(array, read_points, size, self)
 
                 read_points += size
@@ -325,7 +329,7 @@ class PSFFile:
                 pad_size = self.read_uint32()
                 self.fp.seek(pad_size, io.SEEK_CUR)
             else:
-                #raise ValueError('Unexpected data id: ' + str(block_id))
+                # raise ValueError('Unexpected data id: ' + str(block_id))
                 self.completed = False
                 break
 
@@ -339,50 +343,76 @@ class PSFFile:
     def read_sweep_value_non_win(self, npoints, sweep_type):
         t = typeid_to_dtype(sweep_type)
         sweep = np.empty(npoints, dtype=t)
-        value_map = self.array_list_from_trace(npoints, self.traces)
-        
-        for i in range(npoints):
-            x = self.read_uint32()
-            x = self.read_uint32()
-            
-            sweep[i] = self.read_data(sweep_type)
-            for (v, array) in value_map:
-                x = self.read_uint32()
-                x = self.read_uint32()
-                if x!= v.id:
-                    raise PSFReaderError('Unexpected data id:' + str(x))
-                v.read_data(array, i, self)
+        sweep_var = self.sweep_vars[0]
+        value_map = self.array_list_from_trace_group(npoints, self.traces)
+        i = -1
 
-        self.sweep_value = sweep
-        self.read_points = npoints
-        self.variables, self.value = self.flatten_value(value_map)
-        
+        try:
+            while self.fp.tell() < self.fsize:
+                elemid = self.read_uint32()  # check x == ElementId.DATA
+                var_id = self.read_uint32()  # check x == self.sweep_vars[0].id
+
+                if elemid == ElementId.DATA and var_id == sweep_var.id:
+                    i += 1
+                    sweep[i] = self.read_data(sweep_type)
+                elif elemid == ElementId.GROUP:
+                    (v, array) = value_map[var_id]
+                    v.read_data(array, i, self)
+                else:
+                    break
+        except struct.error:  # to be fixed Exception type
+            self.completed = False
+
+        n = i + 1
+        self.sweep_value = sweep[:n]
+        self.read_points = n
+        self.variables, self.value, self.sweep_value_w_var = self.flatten_value_group(value_map, self.sweep_value)
+
     def array_list_from_trace(self, npoints, trace):
         return [(x, x.to_array(npoints, self)) for x in trace]
-    
+
+    def array_list_from_trace_group(self, npoints, trace):
+        return {x.id: (x, x.to_array_group(npoints, self)) for x in trace}
+
     def check_section_end(self, endpos):
         self.fp.seek(endpos, io.SEEK_SET)
-    
+
     def flatten_value(self, value_map):
         variables = list()
         arrays = dict()
-        for (v, a) in value_map: 
+        for (v, a) in value_map:
             variables.extend(v.flatten_value(a, arrays))
         return variables, arrays
-    
+
+    def flatten_value_group(self, value_map, sweep_data):
+        arrays = dict()
+        sweeps = dict()
+        for (v, a) in value_map.values():
+            v.flatten_value_group(a, arrays, sweeps, sweep_data)
+        variables = self.trace_to_signal_names()
+        return variables, arrays, sweeps
+
     def list_to_map(self, lst):
         return {v.name: a for (v, a) in lst}
+
+    def trace_to_signal_names(self):
+        signals = list()
+        for v in self.traces:
+            signals.extend(v.to_signal_list())
+
+        return signals
 
 class PSFReader:
     '''
     Parameter-Storage Format Reader for python.
     '''
-    def __init__(self, filename):
+
+    def __init__(self, filename, header_only=False):
         self.psf = PSFFile(filename)
-        self.psf.read_file()
-    
+        self.psf.read_file(header_only=header_only)
+
     def get_header_properties(self):
-        '''Return a dictionary of properties''' 
+        '''Return a dictionary of properties'''
         return {key: self.psf.properties[key].value for key in self.psf.properties}
 
     def get_signal_names(self):
@@ -390,7 +420,7 @@ class PSFReader:
         return [v.name for (v, _) in self.psf.variables]
 
     def is_swept(self):
-        return not(self.psf.sweep_vars is None)
+        return not (self.psf.sweep_vars is None)
 
     def get_nsweep(self):
         '''Return a number of sweep variables
@@ -410,11 +440,11 @@ class PSFReader:
         return self.psf.properties['PSF sweep points'].value
 
     def get_sweep_values(self):
-        '''Return the value of the sweep variable''' 
+        '''Return the value of the sweep variable'''
         return self.psf.sweep_value
 
     def get_signal_types(self, name):
-        '''Return the TypeId of the signal''' 
+        '''Return the TypeId of the signal'''
         for v in self.psf.sweep_vars:
             if v.name == name:
                 return TypeId(self.psf.types[v.type_id].data_type)
@@ -426,7 +456,7 @@ class PSFReader:
         return None
 
     def get_signal_units(self, name):
-        '''Return the Units of the signal''' 
+        '''Return the Units of the signal'''
         for v in self.psf.sweep_vars:
             if v.name == name:
                 prop = v.prop
@@ -442,13 +472,24 @@ class PSFReader:
                     return prop['units'].value
                 else:
                     return None
-        
+
         return None
 
     def get_signal(self, name):
-        '''Return the signal value(scalar or vector)'''
+        '''Return the signal value and sweep value(scalar or vector)'''
         if name in self.psf.value:
             return self.psf.value[name]
+        else:
+            return None
+
+    def get_sweep_values_with_var(self, name):
+        if self.psf.sweep_value_w_var is not None:
+            if name in self.psf.sweep_value_w_var:
+                return self.psf.sweep_value_w_var[name]
+            else:
+                return None
+        elif self.psf.sweep_value is not None:
+            return self.psf.sweep_value
         else:
             return None
 
@@ -458,4 +499,3 @@ class PSFReader:
 
     def is_wellformed(self):
         return self.psf.has_footer and self.psf.completed
-    

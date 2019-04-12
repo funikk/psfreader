@@ -10,10 +10,11 @@ class TypeId(IntEnum):
     DOUBLE = 0x0b
     COMPLEX_DOUBLE = 0x0c
     STRUCT = 0x10
-    TUPLE = 0x12 # type listのconsの意味？
-    
+    TUPLE = 0x12  # type listのconsの意味？
+
+
 def typeid_to_dtype(t):
-    if t == TypeId.INT8 :
+    if t == TypeId.INT8:
         return np.int8
     elif t == TypeId.INT32:
         return np.int32
@@ -24,8 +25,9 @@ def typeid_to_dtype(t):
     else:
         raise ValueError('Cannot to be a element of array: Type ' + str(TypeId(t)))
 
+
 def typeid_to_size(t):
-    if t == TypeId.INT8 :
+    if t == TypeId.INT8:
         return 4
     elif t == TypeId.INT32:
         return 4
@@ -35,6 +37,7 @@ def typeid_to_size(t):
         return 16
     else:
         raise ValueError('Cannot to be a element of array: Type ' + str(TypeId(t)))
+
 
 class SectionId(IntEnum):
     HEADER = 0
@@ -49,15 +52,18 @@ class ChunkId(IntEnum):
     MAJOR_SECTION = 0x15
     MINOR_SECTION = 0x16
 
+
 class PropertyTypeId(IntEnum):
     STRING = 0x21
     INT = 0x22
     DOUBLE = 0x23
 
+
 class ElementId(IntEnum):
     DATA = 0x10
     GROUP = 0x11
     ZEROPAD = 0x14
+
 
 class SectionInfo:
     def __init__(self, offset, size):
@@ -67,9 +73,10 @@ class SectionInfo:
     def __repr__(self):
         return 'SectionInfo(offset: ' + repr(self.offset) + ', size: ' + repr(self.size) + ')'
 
+
 class PSF_Property:
     def __init__(self):
-        self.name =''
+        self.name = ''
         self.type = 0
         self.value = 0
 
@@ -82,7 +89,7 @@ class PSF_Property:
     def read(self, psffile):
         p_type = psffile.read_uint32()
         self.type = p_type
-        
+
         if p_type == PropertyTypeId.STRING:
             self.name = psffile.read_str()
             self.value = psffile.read_str()
@@ -99,7 +106,7 @@ class PSF_Property:
             # raise ValueError('Unexpected Property type number: ' + str(p_type))
             psffile.unread_uint32()
             return False
-    
+
     @staticmethod
     def read_dictionary(psffile):
         properties = dict()
@@ -111,7 +118,8 @@ class PSF_Property:
                 break
 
         return properties
- 
+
+
 class PSF_Type:
     def __init__(self):
         self.id = 0
@@ -146,7 +154,7 @@ class PSF_Type:
             if code != TypeId.TUPLE:
                 psffile.unread_uint32()
                 break
-            
+
             typedef = PSF_Type()
             valid = typedef.read(psffile, typemap)
             if valid:
@@ -155,6 +163,7 @@ class PSF_Type:
             else:
                 break
 
+
 class PSF_Variable:
     def __init__(self):
         self.id = 0
@@ -162,18 +171,18 @@ class PSF_Variable:
         self.type_id = 0
         self.prop = None
         self.is_group = False
-    
+
     def read(self, psffile):
         code = psffile.read_uint32()
         if code != ElementId.DATA:
             psffile.unread_uint32()
             return False
-        
+
         self.id = psffile.read_uint32()
         self.name = psffile.read_str()
         self.type_id = psffile.read_uint32()
         self.prop = PSF_Property.read_dictionary(psffile)
-        
+
         return True
 
     def __repr__(self):
@@ -184,15 +193,30 @@ class PSF_Variable:
         dtype = typeid_to_dtype(psf_type)
         return np.empty(npoints, dtype=dtype)
 
+    def to_array_group(self, npoints, psffile):
+        psf_type = psffile.types[self.type_id].data_type
+        dtype = typeid_to_dtype(psf_type)
+        return (np.empty(npoints, dtype=dtype), np.zeros(npoints, dtype=bool))
+
     def read_data(self, array, i, psffile):
-        array[i] = psffile.read_data(psffile.types[self.type_id].data_type)
+        data_array, data_valid = array
+        data_array[i] = psffile.read_data(psffile.types[self.type_id].data_type)
+        data_valid[i] = True
 
     def read_data_win(self, array, start, size, psffile):
         psffile.read_data_win(array, start, size, psffile.types[self.type_id].data_type)
 
     def flatten_value(self, a, arrays):
         arrays[self.name] = a
-        return [(self, a)] 
+        return [(self, a)]
+
+    def flatten_value_group(self, a, arrays, sweeps, sweep_data):
+        data_array, data_valid = a
+        arrays[self.name] = data_array[data_valid]
+        sweeps[self.name] = sweep_data[data_valid]
+
+    def to_signal_list(self):
+        return [(self, None)]
 
 class PSF_Group:
     def __init__(self):
@@ -202,14 +226,14 @@ class PSF_Group:
         self.is_group = True
 
     def __repr__(self):
-        return 'Group(id: ' + repr(self.id) + ', names: ' + self.name + ', vars: ' + repr(self.vars) +')'
+        return 'Group(id: ' + repr(self.id) + ', names: ' + self.name + ', vars: ' + repr(self.vars) + ')'
 
     def read(self, psffile):
         code = psffile.read_uint32()
         if code != ElementId.GROUP:
             psffile.unread_uint32()
             return False
-        
+
         self.id = psffile.read_uint32()
         self.name = psffile.read_str()
         length = psffile.read_uint32()
@@ -220,12 +244,15 @@ class PSF_Group:
             if v.read(psffile):
                 self.vars.append(v)
             else:
-                raise ValueError('Group length is '+ str(length) + ', but actually ' + str(i))
-        
+                raise ValueError('Group length is ' + str(length) + ', but actually ' + str(i))
+
         return True
 
     def to_array(self, npoints, psffile):
         return [(x, x.to_array(npoints, psffile)) for x in self.vars]
+
+    def to_array_group(self, npoints, psffile):
+        return [(x, x.to_array_group(npoints, psffile)) for x in self.vars]
 
     def read_data(self, array, i, psffile):
         for (v, ary) in array:
@@ -240,3 +267,14 @@ class PSF_Group:
         for (v, ary) in a:
             variables.extend(v.flatten_value(ary, arrays))
         return variables
+
+    def flatten_value_group(self, a, arrays, sweeps, sweep_data):
+        for (v, ary) in a:
+            v.flatten_value_group(ary, arrays, sweeps, sweep_data)
+
+    def to_signal_list(self):
+        signals = list()
+        for x in self.vars:
+            signals.extend(x.to_signal_list())
+
+        return signals
