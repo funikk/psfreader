@@ -355,7 +355,7 @@ class PSFFile:
                 if elemid == ElementId.DATA and var_id == sweep_var.id:
                     i += 1
                     sweep[i] = self.read_data(sweep_type)
-                elif elemid == ElementId.GROUP:
+                elif elemid == ElementId.GROUP or elemid == ElementId.DATA:
                     (v, array) = value_map[var_id]
                     v.read_data(array, i, self)
                 else:
