@@ -1,0 +1,6 @@
+{
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "flake8.args": [
+        "--max-line-length=120"
+    ]
+}

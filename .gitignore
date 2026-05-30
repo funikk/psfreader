@@ -5,3 +5,5 @@ __pycache__/
 # PyDev project files
 .project
 .pydevproject
+dist/
+*.egg-info/
