@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psfreader"
+version = "0.1.0"
+description = "A Python library for reading Parameter-Storage Format (PSF) binary files."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+  { name = "PSFReader Project" }
+]
+dependencies = [
+  "numpy>=1.24"
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: GNU Library or Lesser General Public License v3 (LGPLv3+)",
+  "Operating System :: OS Independent"
+]
+keywords = ["psf", "binary", "numpy", "simulation", "waveform"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["psfreader*"]
